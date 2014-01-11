@@ -1,7 +1,7 @@
-%_javapackages_macros
+%{?_javapackages_macros:%_javapackages_macros}
 Name:             maven-filtering
 Version:          1.1
-Release:          2.0%{?dist}
+Release:          2.1%{?dist}
 Summary:          Shared component providing resource filtering
 License:          ASL 2.0
 URL:              http://maven.apache.org/shared/%{name}/index.html
