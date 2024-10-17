@@ -4,7 +4,7 @@ Version:          1.1
 Release:          2.1%{?dist}
 Summary:          Shared component providing resource filtering
 License:          ASL 2.0
-URL:              http://maven.apache.org/shared/%{name}/index.html
+URL:              https://maven.apache.org/shared/%{name}/index.html
 Source0:          http://repo1.maven.org/maven2/org/apache/maven/shared/%{name}/%{version}/%{name}-%{version}-source-release.zip
 BuildArch:        noarch
 
