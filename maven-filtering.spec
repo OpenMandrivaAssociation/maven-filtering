@@ -1,90 +1,110 @@
-%{?_javapackages_macros:%_javapackages_macros}
-Name:             maven-filtering
-Version:          1.1
-Release:          2.1%{?dist}
-Summary:          Shared component providing resource filtering
-License:          ASL 2.0
-URL:              https://maven.apache.org/shared/%{name}/index.html
-Source0:          http://repo1.maven.org/maven2/org/apache/maven/shared/%{name}/%{version}/%{name}-%{version}-source-release.zip
-BuildArch:        noarch
+Name:		maven-filtering
+Version:	3.5.1
+Release:	1
+Summary:	Shared Maven resource filtering
+Group:		Development/Java
+License:	Apache-2.0
+URL:		https://maven.apache.org/shared/maven-filtering/
+Source0:	https://github.com/apache/maven-filtering/archive/refs/tags/maven-filtering-%{version}.tar.gz#/maven-filtering-%{version}.tar.gz
+BuildArch:	noarch
+BuildRequires:	python
+# The maven RPM holds the class jars. maven-components owns the coordinates.
+BuildRequires:	maven
+BuildRequires:	maven-components >= 3.10.0
+BuildRequires:	java-current-devel
+BuildRequires:	mvn(org.apache.maven:maven-core)
+BuildRequires:	mvn(org.apache.maven:maven-model)
+BuildRequires:	mvn(org.apache.maven:maven-settings)
+BuildRequires:	mvn(org.sonatype.plexus:plexus-build-api)
+# 1.2.0-1 provides the coordinate but has no sysjar index.
+BuildRequires:	plexus-build-api >= 1.2.0-2
+Requires:	plexus-build-api >= 1.2.0-2
+BuildRequires:	mvn(org.codehaus.plexus:plexus-utils)
+BuildRequires:	plexus-utils >= 3.6.2
+Requires:	plexus-utils >= 3.6.2
+BuildRequires:	mvn(org.codehaus.plexus:plexus-interpolation)
+BuildRequires:	plexus-interpolation >= 1.30.0
+Requires:	plexus-interpolation >= 1.30.0
+BuildRequires:	mvn(org.slf4j:slf4j-api)
+BuildRequires:	mvn(javax.inject:javax.inject)
+BuildSystem:	maven
+BuildOption(install):	--file-name %{name}
 
-BuildRequires:    maven-local
-BuildRequires:    maven-shared
-BuildRequires:    plexus-build-api
-BuildRequires:    plexus-containers-component-metadata
-
-Provides:         maven-shared-filtering = 1.0-99
-Obsoletes:        maven-shared-filtering < 1.0-99 
+Obsoletes:	maven-shared-filtering < %{EVRD}
+Provides:	maven-shared-filtering = %{EVRD}
 
 %description
-These Plexus components have been built from the filtering process/code in 
-Maven Resources Plugin. The goal is to provide a shared component for all 
-plugins that needs to filter resources.
-
-%package javadoc
-Summary:          Javadoc for %{name}
-
-%description javadoc
-This package contains the API documentation for %{name}.
+Filters Maven project resources and property files. 3.5.1 uses
+plexus-interpolation 1.30 and the 0.0.7 build context. Tests are not run.
 
 %prep
-%setup -q
+%autosetup -n maven-filtering-maven-filtering-%{version}
+rm -rf src/test .github
+python - <<'PY'
+import xml.etree.ElementTree as ET
+NS = "http://maven.apache.org/POM/4.0.0"
+ET.register_namespace("", NS)
 
-# Replace plexus-maven-plugin with plexus-component-metadata
-%pom_xpath_set "pom:plugin[pom:artifactId[text()='plexus-maven-plugin']]//pom:goal[text()='descriptor']" generate-metadata
-%pom_xpath_set "pom:artifactId[text()='plexus-maven-plugin']" plexus-component-metadata
+def tag(name):
+    return "{" + NS + "}" + name
 
-%build
-# Tests use a package that is no longer present in plexus-build-api (v0.0.7)
-%mvn_build -f
+def add(parent, name, text):
+    node = ET.SubElement(parent, tag(name))
+    node.text = text
+    return node
 
-%install
-%mvn_install
+root = ET.Element(tag("project"))
+add(root, "modelVersion", "4.0.0")
+add(root, "groupId", "org.apache.maven.shared")
+add(root, "artifactId", "maven-filtering")
+add(root, "version", "%{version}")
+add(root, "name", "Apache Maven Filtering")
+props = ET.SubElement(root, tag("properties"))
+add(props, "maven.compiler.release", "8")
+add(props, "project.build.sourceEncoding", "UTF-8")
+deps = ET.SubElement(root, tag("dependencies"))
+for group, artifact, version, scope in (
+    ("org.apache.maven", "maven-core", "3.10.0", "provided"),
+    ("org.apache.maven", "maven-model", "3.10.0", "provided"),
+    ("org.apache.maven", "maven-settings", "3.10.0", "provided"),
+    ("org.sonatype.plexus", "plexus-build-api", "0.0.7", ""),
+    ("org.codehaus.plexus", "plexus-utils", "3.6.2", ""),
+    ("org.codehaus.plexus", "plexus-interpolation", "1.30.0", ""),
+    ("org.slf4j", "slf4j-api", "1.7.36", ""),
+    ("javax.inject", "javax.inject", "1", ""),
+):
+    dep = ET.SubElement(deps, tag("dependency"))
+    add(dep, "groupId", group)
+    add(dep, "artifactId", artifact)
+    add(dep, "version", version)
+    if scope:
+        add(dep, "scope", scope)
+ET.ElementTree(root).write("pom.xml", encoding="utf-8", xml_declaration=True)
+PY
+# Sisu loads @Named classes from this index. The indexer plugin is not packaged.
+python - <<'PY'
+import re
+from pathlib import Path
+root = Path("src/main/java")
+names = []
+for path in sorted(root.rglob("*.java")):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    text = re.sub(r"//.*?$", "", text, flags=re.M)
+    match = re.search(r"\b(?:class|interface|enum)\s+([A-Za-z0-9_]+)", text)
+    if not match:
+        continue
+    if "@Named" not in text[:match.start()]:
+        continue
+    pkg = re.search(r"(?m)^package\s+([A-Za-z0-9_.]+)\s*;", text)
+    if not pkg:
+        continue
+    names.append(pkg.group(1) + "." + match.group(1))
+if names:
+    dest = Path("src/main/resources/META-INF/sisu")
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "javax.inject.Named").write_text("\n".join(names) + "\n", encoding="utf-8")
+PY
 
 %files -f .mfiles
-%doc DEPENDENCIES LICENSE NOTICE
-
-%files javadoc -f .mfiles-javadoc
-%doc LICENSE NOTICE
-
-%changelog
-* Sat Aug 03 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.1-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
-
-* Tue Feb 19 2013 Mikolaj Izdebski <mizdebsk@redhat.com> - 1.1-1
-- Update to upstream version 1.1
-
-* Thu Feb 14 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.0-11
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
-
-* Wed Feb 06 2013 Java SIG <java-devel@lists.fedoraproject.org> - 1.0-10
-- Update for https://fedoraproject.org/wiki/Fedora_19_Maven_Rebuild
-- Replace maven BuildRequires with maven-local
-
-* Tue Nov 27 2012 Tomas Radej <tradej@redhat.com> - 1.0-9
-- Added NOTICE to javadoc
-
-* Thu Jul 19 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.0-8
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
-
-* Thu Mar 15 2012 Tomas Radej <tradej@redhat.com> - 1.0-7
-- Replaced plexus-maven-plugin with plexus-containers-component-metadata
-
-* Fri Jan 13 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.0-6
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
-
-* Wed Aug 31 2011 Tomas Radej <tradej@redhat.com> - 1.0-5
-- Really fixed Provides/Obsoletes
-
-* Wed Aug 31 2011 Tomas Radej <tradej@redhat.com> - 1.0-4
-- Fixed Provides/Obsoletes
-
-* Wed Aug 31 2011 Tomas Radej <tradej@redhat.com> - 1.0-3
-- Added Provides/Obsoletes
-
-* Tue Aug 16 2011 Tomas Radej <tradej@redhat.com> 1.0-2
-- Removed rm -rf {buildroot}
-
-* Tue Aug 16 2011 Tomas Radej <tradej@redhat.com> 1.0-1
-- Initial release (thanks to the GULaG team)
-
+%doc README.md

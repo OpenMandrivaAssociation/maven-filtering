@@ -1,2 +1,4 @@
 sources:
+  maven-filtering-3.5.1.tar.gz: ea794c7cc7510f6f0c08eb9d871bd68f06f19dd6
+removed_sources:
   maven-filtering-1.1-source-release.zip: 64b503ee73d91f71868283e79451eaf28a8305c8
