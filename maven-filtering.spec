@@ -27,6 +27,9 @@ BuildRequires:	plexus-interpolation >= 1.30.0
 Requires:	plexus-interpolation >= 1.30.0
 BuildRequires:	mvn(org.slf4j:slf4j-api)
 BuildRequires:	mvn(javax.inject:javax.inject)
+# javax.inject and jakarta-inject both provide this coordinate.
+BuildRequires:	javax.inject >= 1-2
+Requires:	javax.inject >= 1-2
 BuildSystem:	maven
 BuildOption(install):	--file-name %{name}
 
